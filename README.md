@@ -1,35 +1,80 @@
-REST based DAO pattern for resource modeled closely to the AngularJS resource
+# DAO pattern for loading RESTful resources
 
-parse marshall/unmarshall
-validation
-convenince methods for post, get, update, delete
-add query params
-pagination
-faulting opbjects in an array or object
+## Resource tasks
 
-use promises to let objects auto-download when needed
+* parse serialize/deserialize
+* validation
+* convenince methods for post, get, update, delete
+* add query params
+* pagination
+* faulting opbjects in an array or object
 
-create traditional javascript objects with prototypes
+* create traditional javascript objects with prototypes
 
-persist objects locally and store on rest server seperate
+# Loading
 
-allow for object mutation observing. or dirty check and sync with mutation observing interface.
+* use __promises__ to let objects auto-download when needed
+* resources can be relatint on another resource to build. Token Authentication.
+* Allow for token authentication and to change resource calls if needed to create an object. ie. need token, need user id, need friends list, access friends photo
 
-define a resource then create instances. Attach resources to other resources
+# Peresisting locally to allow for batch sending
 
-define custom methods. custom methods can have default params. can pass object with custom params in function.
+* persist objects locally and store on rest server seperate
 
-Allow for token authentication and to change resource calls if needed to create an object. ie. need token, need user id, need friends list, access friends photo
+# Notifications/changes to the data
 
-no defined scheme needed. resoruces can be sperate. no-sql mentality.
+* allow for object mutation observing. or dirty check and sync with mutation observing interface.
 
-basic API for low learning curve.
+* define a resource then create instances. Attach resources to other resources
 
-attach function on the JSON but make them non-writable and non-enumeratable
+# Allow for traditional subclassing
 
-allow for actions on the API
+* define custom methods. custom methods can have default params. can pass object with custom params in function.
 
-$restful(function User(){}, '/user/:id')
+
+# General principles 
+
+* no defined scheme needed. resoruces can be sperate. no-sql mentality.
+* basic API for low learning curve.
+* extend vanilla JSON with functions (freeze and seal) make them non-writable and non-enumeratable
+* allow for actions on the API, all API calls won't result in an Object but some will take actions.
+
+# Threading
+
+* run fetchs on the background. alwys for parsing to happen on the background too. Allow the option for web workers and promises.
+
+add javascript execultion time for pasering and loading to help find issues
+
+
+
+$restful(function Token(){}, 
+          '/login', 
+          {username:'joe', password:'pass', token:1234}, 
+          function(xhr)
+          {
+            if (success)
+            {
+              _saveToken();
+            }
+            else
+            {
+              _retryOrErrorOut();
+            }
+          });
+
+$restful(function User(Token){}, 
+        '/user/:id', 
+        {
+          parse:function(data)
+          {
+            //turn into object
+          },
+          assemble:function(json)
+          {
+            //stringify and/or url encode
+          },
+          
+        })
 
 
 
