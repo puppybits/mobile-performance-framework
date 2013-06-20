@@ -2,11 +2,44 @@ define('dispatch',
   function () {
     'use strict';
     
+    (function() {
+      var requestAnimationFrame = window.requestAnimationFrame || 
+                                  window.mozRequestAnimationFrame ||
+                                  window.webkitRequestAnimationFrame ||
+                                  window.msRequestAnimationFrame || 
+                                  function( callback ){
+                                    window.setTimeout(callback, 1000 / 60);
+                                  };
+      window.requestAnimationFrame = requestAnimationFrame;
+      window.console = console || {};
+      window.console.time = window.console.time || function(){};
+      window.console.timeEnd = window.console.timeEnd || function(){}
+    })();
+    
+    var DEFER_DELAY = (1000 / 60) * 3, 
+    
     /*!
      * store workers and functions in a queue. 
      * TODO: find a way to have a object pool for web workers
      */
-    var queue = [],
+    queue = [],
+    result = null,
+    
+    paused = false,
+    pauseTimer = null,
+    
+    /*!
+     * Process any work remaining in the queue
+     */
+    start = Date.now(),
+    delta = 0,
+    step = function(timestamp)
+    {
+      delta = timestamp - start;
+      console.log(delta)
+      next();
+      requestAnimationFrame(step);
+    },
     
     /*!
      * create a anonymous block of work and the inital arguments
@@ -15,7 +48,7 @@ define('dispatch',
      * \param args an array of the arguments for the function
      * \return Worker a web worker to be executed by the queue
      */
-    createThread = function(func, args)
+    createThread = function(func, args, callback)
     {
       // TODO: add hook to stop processing when heavy load
       // TODO: fall back to main thread if workers not supported
@@ -29,47 +62,74 @@ define('dispatch',
         'returnValue = fn.apply(fn, data);\n'+
         'self.postMessage( returnValue );\n'+
         '};';
-  
-      var serizedAction = window.URL.createObjectURL(
-                            new Blob([synchronousAction])),
+      
+      var compile = new Blob([synchronousAction]),
+      serizedAction = window.URL.createObjectURL(compile),
       thread = new Worker(serizedAction);
       thread.addEventListener('message', function(e)
       {
-        console.debug(e.data)
-        var result = e.data;
-        // call next task in the queue chain
+        callback(e.data);
       });
       
-      // add worker to queue
-      
+      return thread;
     },
 
-    runQueue: function()
+    next = function(data)
     {
-      // add listeners for scrolling, mousemove, over runloop time to stop execution
+      if (paused) return;
       
-      // loop through queue
+      var i, task, args, fnc, len = queue.length;
+      for (i=0; i<len; i++)
+      {
         // start perf timer
+        console.time('dispatch');
         
         // run a task
+        task = queue.pop();
+        
+        if (task.type === 'sync') i = len;
+        fnc = task.fnc;
+        args = task.args;
+        args.push(data)
+        result = fnc.apply(this, args)
         
         // record perf timer
+        console.timeEnd('dispatch');
+      }
     },
     
-    dispatch = {
-      asyc: function()
+    dispatch = function(){
+      this.asyc = function(fnc, args)
       {
-        // create a worker thread.
-        // TODO: need to add function to reuse thread since they are expenive to create
-        // add to queue 
-        // return self for chaining
-      },
-      sync: function()
-      {
+        var args = args || [],
+        thread = createThread(fnc, args, next);
         
-        // return self for chaining
-      },
-      batch: function(fnc, items, throttle)
+        queue.push({
+          type: 'async', 
+          args: args,
+          fnc: function()
+          {
+            thread.postMessage(arguments)
+          }
+        });
+        // TODO: need to add function to reuse thread since they are expenive to create
+        
+        return this;
+      }
+      this.sync = function(fnc, args)
+      {
+        var args = args || [];
+        
+        queue.push({
+          type: 'async', 
+          args: args,
+          fnc: fnc
+        });
+        
+        next(result);
+        return this;
+      }
+      this.batch = function(fnc, items, throttle)
       {
         // create a function to iterate 
         
@@ -81,6 +141,20 @@ define('dispatch',
       }
     };
     dispatch.prototype = function Dispatch(){}
+    
+    // add listeners for scrolling to defer work
+    window.addEventListener('scroll', function()
+    {
+      if (pauseTimer) clearInterval(pauseTimer);
+      
+      paused = true;
+      
+      pauseTimer = setInterval(function()
+      {
+        paused = false;
+        clearInterval(pauseTimer);
+      }, DEFER_DELAY);
+    });
     
     return dispatch;
 });
